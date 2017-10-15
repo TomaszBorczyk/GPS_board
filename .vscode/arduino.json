@@ -1,5 +1,5 @@
 {
     "port": "COM3",
     "board": "adafruit:avr:feather32u4",
-    "sketch": "gps.ino"
+    "sketch": "gps\\gps.ino"
 }

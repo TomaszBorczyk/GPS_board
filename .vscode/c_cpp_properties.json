@@ -3,12 +3,14 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceRoot}"
+                "${workspaceRoot}",
+                "C:\\Users\\Bob\\Documents\\Arduino\\libraries\\Adafruit_FONA",
+                "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\libraries\\SoftwareSerial\\src"
             ],
             "browse": {
                 "limitSymbolsToIncludedHeaders": false,
                 "path": [
-                    "${workspaceRoot}"
+                    "${workspaceRoot}"                
                 ]
             },
             "intelliSenseMode": "msvc-x64"
