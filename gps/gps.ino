@@ -19,6 +19,9 @@ uint8_t type;
 
 
 void setup() {
+  while (!Serial);
+  Serial.begin(115200);
+  Serial.println(F("FONA basic test"));
 
   fonaSerial->begin(4800);
   if (! fona.begin(*fonaSerial)) {
@@ -30,19 +33,36 @@ void setup() {
 
 
 void loop() {
-
-  while(!fona.available());
-  while(getNetworkStatus()!=1);
-  while(!enableGPRS()){
-      delay(1000);
+  Serial.print(F("FONA> "));
+  while (! Serial.available() ) {
+    if (fona.available()) {
+      Serial.write(fona.read());
+    }
   }
-  char *time = getNetworkTime();
-  char data[200];
-  sprintf(data, "{ \"device_id\":%s }", time);
 
-  postData(_URL, data);
+  // while(!fona.available());
+  // while(getNetworkStatus()!=1);
+  // while(!enableGPRS()){
+  //     delay(1000);
+  // }
 
-  while(1);
+  // char *time = getNetworkTime();
+  // char data[200];
+  // sprintf(data, "{ \"device_id\":%s }", time);
+
+  // postData(_URL, data);
+
+  // while(1);
+
+  flushSerial();
+  while (fona.available()) {
+    Serial.write(fona.read());
+  }
+}
+
+void flushSerial() {
+  while (Serial.available())
+    Serial.read();
 }
 
 void postData(char *URL, char *data){
