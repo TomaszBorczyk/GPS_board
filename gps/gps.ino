@@ -7,24 +7,24 @@
 #define FONA_RST 4
 #define FONA_RI  7
 
-#define GPS_RX 0
-#define GPS_TX 1
-
 #define INTR 2
 #define LED 13
 #define TILT_IN 18
 
-#define _URL "gps-tracker.herokuapp.com/api/v1/device/registerdevice"
+#define IMEI 862877033359769
+#define _URL "gps-tracker.herokuapp.com/api/v1/device/updatelocation"
 
-// this is a large buffer for replies
+enum deviceMode {SLEEP, TRACK};
+
+volatile enum deviceMode mode;
 char replybuffer[255];
 float lat, lon;
 volatile bool state;
+bool registered = false;
+
 TinyGPS gps;
 
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
-// SoftwareSerial gpsSerial = SoftwareSerial(GPS_TX, GPS_RX);
-// SoftwareSerial gpsSerial(GPS_TX, GPS_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 
@@ -33,9 +33,9 @@ uint8_t type;
 
 void setup() {
   // pinMode(TILT_IN, INPUT);
-  pinMode(LED, OUTPUT);
-  pinMode(INTR, INPUT_PULLUP);
-  attachInterruptForTilt();
+  // pinMode(LED, OUTPUT);
+  // pinMode(INTR, INPUT_PULLUP);
+  // attachInterruptForTilt();
 
   while (!Serial);
   Serial.begin(9600);
@@ -43,70 +43,57 @@ void setup() {
   Serial1.begin(9600);
   Serial.println(F("FONA basic test"));
 
-  // fonaSerial->begin(4800);
-  // if (! fona.begin(*fonaSerial)) {
-  //   while (1);
-  // }
-  // type = fona.type();
-  // fona.setGPRSNetworkSettings(F("internet"));
+  fonaSerial->begin(4800);
+  if (! fona.begin(*fonaSerial)) {
+    while (1);
+  }
+  type = fona.type();
+  fona.setGPRSNetworkSettings(F("internet"));
   state = false;
-  lat = 0.123456;
-  lon = 0.123456;
+  mode = SLEEP;
+  lat = 0.11;
+  lon = 0.11;
 }
 
 
 void loop() {
-  Serial.print(F("FONA> "));
   while (! Serial.available() ) {
     // if (fona.available()) {
     //   Serial.write(fona.read());
     // }
   }
 
-  // while(!fona.available());
-  // while(getNetworkStatus()!=1);
-  // while(!enableGPRS()){
-  //     delay(1000);
+
+  // main code idea 
+  // while(mode == TRACK){
+  //   if(gps.encode(Serial1.read())){ 
+  //     gps.f_get_position(&lat, &lon);
+  //     char * response = postData(createJSONData(lat, lon));
+  //     checkIfPositionNotChanging();
+  //     checkResponse(response);
+  //     if(shouldStop) enterSleepMode();
+  //     delay(15000);
+  //   }
   // }
-
-  // char *time = getNetworkTime();
-  // char data[200];
-  // sprintf(data, "{ \"device_id\":%s }", time);
-
-  // postData(_URL, data);
-
-  // while(1);
-
-  // while(1){
-  //   Serial.println(readTilt());
-  //   delay(50);
+  // else if(mode == SLEEP){
   // }
-  while(!Serial1.available());
-  while(Serial1.available()){ // check for gps data
-    if(gps.encode(Serial1.read())){ 
-      gps.f_get_position(&lat,&lon);
-    }
-    Serial.print("GPS: ");
-    Serial.print(lat, 6);
-    Serial.print(", ");
-    Serial.print(lon, 6);
-    Serial.println("");
+  // end of main code idea 
+
+
+  while(!fona.available());
+  while(getNetworkStatus()!=1);
+  while(!enableGPRS()){
+      delay(1000);
   }
 
-  // while(1){
-  //   if(Serial1.available()){
-  //     Serial.println("GPS available");
-  //   }
-  //   while(Serial.available()){
-  //     delay(1);
-  //     Serial1.write(Serial.read());
-  //   }
-  //   if(Serial1.available()){
-  //     Serial.write(Serial1.read());
-  //   }
-  // }
-
-
+  while(!Serial1.available());
+  while(Serial1.available()){ // check for gps data
+    if(gps.encode(Serial1.read())){
+      gps.f_get_position(&lat,&lon);
+      // Serial.println(createJSONData(IMEI, lat, lon));
+      Serial.println(lat);
+    }
+  }
 
   // flushSerial();
   // while (fona.available()) {
@@ -121,7 +108,23 @@ void flushSerial() {
 
 void attachInterruptForTilt(){
   attachInterrupt(digitalPinToInterrupt(INTR), blink, CHANGE);
-  
+}
+
+void attachTiltIntr(){
+  attachInterrupt(digitalPinToInterrupt(INTR), enterTrackingMode, RISING);
+}
+
+void enterTrackingMode(){
+  mode = TRACK;
+  detachInterrupt(digitalPinToInterrupt(INTR));
+  fona.enableGPRS(true);
+
+}
+
+void enterSleepMode(){
+  mode = SLEEP;
+  attachTiltIntr();
+  fona.enableGPRS(false);
 }
 
 void blink(){
@@ -136,6 +139,18 @@ float readTilt(){
   return value;
 }
 
+const char *createJSONData(int id, float lat, float lon){
+  char buffer[250];
+  char lat_c[12], lon_c[13];
+  dtostrf(lat, 9, 7, lat_c);
+  dtostrf(lon, 10, 7, lon_c);
+  lat_c[11]='\0';
+  lon_c[12]='\0';
+  
+  sprintf(buffer, "{\"device_id\":\"%i\",\"lat\":%s,\"lon\":%s}%c", id, lat_c, lon_c, '\0');
+  return buffer;
+}
+
 
 void postData(char *URL, char *data){
   uint16_t statuscode;
@@ -146,10 +161,12 @@ void postData(char *URL, char *data){
   while (length > 0) {
     while (fona.available()) {
       char c = fona.read();
+      Serial.write(c);
       length--;
       if (! length) break;
     }
   }
+  registered = true;
   fona.HTTP_POST_end();
 }
 
