@@ -11,8 +11,7 @@
 #define LED 13
 #define TILT_IN 18
 
-#define IMEI 862877033359769
-#define _URL "gps-tracker.herokuapp.com/api/v1/device/updatelocation"
+#define _URL "gps-tracker.herokuapp.com/api/v1/device/registerdevice"
 
 enum deviceMode {SLEEP, TRACK};
 
@@ -20,7 +19,6 @@ volatile enum deviceMode mode;
 char replybuffer[255];
 float lat, lon;
 volatile bool state;
-bool registered = false;
 
 TinyGPS gps;
 
@@ -53,6 +51,7 @@ void setup() {
   mode = SLEEP;
   lat = 0.11;
   lon = 0.11;
+  basicSetup();
 }
 
 
@@ -62,8 +61,7 @@ void loop() {
     //   Serial.write(fona.read());
     // }
   }
-
-
+  
   // main code idea 
   // while(mode == TRACK){
   //   if(gps.encode(Serial1.read())){ 
@@ -80,25 +78,45 @@ void loop() {
   // end of main code idea 
 
 
-  while(!fona.available());
-  while(getNetworkStatus()!=1);
-  while(!enableGPRS()){
-      delay(1000);
-  }
+  // while(!fona.available()){
+  //   Serial.println("fona not av");
+  // }
+  // while(getNetworkStatus()!=1){
+  //   Serial.println("no netwrok");
+  // }
+  // while(!enableGPRS()){
+  //   Serial.println("enabloong gprs");
+  //   delay(1000);
+  // }
 
   while(!Serial1.available());
   while(Serial1.available()){ // check for gps data
-    if(gps.encode(Serial1.read())){
+    if(gps.encode(Serial1.read())){ 
       gps.f_get_position(&lat,&lon);
-      // Serial.println(createJSONData(IMEI, lat, lon));
-      Serial.println(lat);
+      Serial.println(createJSONData(lat, lon));
     }
   }
+
+  // Serial.println(F("HELLO"));
+
 
   // flushSerial();
   // while (fona.available()) {
   //   Serial.write(fona.read());
   // }
+}
+
+void basicSetup(){
+  while(!fona.available()){
+    // Serial.println("fona not av");
+  }
+  while(getNetworkStatus()!=1){
+    // Serial.println("no netwrok");
+  }
+  while(!enableGPRS()){
+    // Serial.println("enabloong gprs");
+    delay(1000);
+  }
 }
 
 void flushSerial() {
@@ -139,7 +157,7 @@ float readTilt(){
   return value;
 }
 
-const char *createJSONData(int id, float lat, float lon){
+const char *createJSONData(float lat, float lon){
   char buffer[250];
   char lat_c[12], lon_c[13];
   dtostrf(lat, 9, 7, lat_c);
@@ -147,7 +165,7 @@ const char *createJSONData(int id, float lat, float lon){
   lat_c[11]='\0';
   lon_c[12]='\0';
   
-  sprintf(buffer, "{\"device_id\":\"%i\",\"lat\":%s,\"lon\":%s}%c", id, lat_c, lon_c, '\0');
+  sprintf(buffer, "{lat:%s,lon:%s}%c", lat_c, lon_c, '\0');
   return buffer;
 }
 
@@ -166,7 +184,6 @@ void postData(char *URL, char *data){
       if (! length) break;
     }
   }
-  registered = true;
   fona.HTTP_POST_end();
 }
 
