@@ -5,10 +5,13 @@
 #define FONA_TX  8
 #define FONA_RST 4
 #define FONA_RI  7
+#define INTR 2
+#define LED 13
 
 #define _URL "gps-tracker.herokuapp.com/api/v1/device/registerdevice"
 // this is a large buffer for replies
 char replybuffer[255];
+volatile bool state;
 
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
@@ -24,6 +27,7 @@ void setup() {
   }
   type = fona.type();
   fona.setGPRSNetworkSettings(F("internet"));
+  state = false;
 }
 
 
@@ -40,6 +44,18 @@ void loop() {
   postData(_URL, data);
 
   while(1);
+}
+
+void blink(){
+  if(state == false) digitalWrite(LED, HIGH);
+  else digitalWrite(LED, LOW);
+  state = !state;
+}
+
+float readTilt(){
+  float value;
+  value = pulseIn(TILT_IN, HIGH);
+  return value;
 }
 
 
