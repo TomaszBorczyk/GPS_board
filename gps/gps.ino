@@ -57,6 +57,11 @@ void loop() {
 
   // while(1);
 
+  while(1){
+    Serial.println(readTilt());
+    delay(50);
+  }
+
   flushSerial();
   while (fona.available()) {
     Serial.write(fona.read());
