@@ -1,16 +1,18 @@
-
 #include "Adafruit_FONA.h"
+#include <SoftwareSerial.h>
 
 #define FONA_RX  9
 #define FONA_TX  8
 #define FONA_RST 4
 #define FONA_RI  7
+#define INTR 2
+#define LED 13
 
 #define _URL "gps-tracker.herokuapp.com/api/v1/device/registerdevice"
 // this is a large buffer for replies
 char replybuffer[255];
+volatile bool state;
 
-#include <SoftwareSerial.h>
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
@@ -29,6 +31,7 @@ void setup() {
   }
   type = fona.type();
   fona.setGPRSNetworkSettings(F("internet"));
+  state = false;
 }
 
 
@@ -65,12 +68,24 @@ void flushSerial() {
     Serial.read();
 }
 
+void blink(){
+  if(state == false) digitalWrite(LED, HIGH);
+  else digitalWrite(LED, LOW);
+  state = !state;
+}
+
+float readTilt(){
+  float value;
+  value = pulseIn(TILT_IN, HIGH);
+  return value;
+}
+
+
 void postData(char *URL, char *data){
   uint16_t statuscode;
   int16_t length;
 
   if (!fona.HTTP_POST_start(URL, F("application/json"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length)) {
-    // Serial.println("Failed!");
   }
   while (length > 0) {
     while (fona.available()) {
@@ -95,7 +110,6 @@ const char *getNetworkTime(){
 
 boolean enableGPRS(){
     if (!fona.enableGPRS(true)){
-        // Serial.println(F("Failed to turn on"));
         return false;
     }
     return true;
