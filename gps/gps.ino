@@ -1,20 +1,30 @@
 #include "Adafruit_FONA.h"
 #include <SoftwareSerial.h>
+#include <TinyGPS.h>
 
 #define FONA_RX  9
 #define FONA_TX  8
 #define FONA_RST 4
 #define FONA_RI  7
+
+#define GPS_RX 0
+#define GPS_TX 1
+
 #define INTR 2
 #define LED 13
 #define TILT_IN 18
 
 #define _URL "gps-tracker.herokuapp.com/api/v1/device/registerdevice"
+
 // this is a large buffer for replies
 char replybuffer[255];
+float lat, lon;
 volatile bool state;
+TinyGPS gps;
 
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
+// SoftwareSerial gpsSerial = SoftwareSerial(GPS_TX, GPS_RX);
+// SoftwareSerial gpsSerial(GPS_TX, GPS_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 
@@ -22,31 +32,35 @@ uint8_t type;
 
 
 void setup() {
-  while (!Serial);
-  Serial.begin(115200);
-  Serial.println(F("FONA basic test"));
-
-  fonaSerial->begin(4800);
-  if (! fona.begin(*fonaSerial)) {
-    while (1);
-  }
-  type = fona.type();
-  fona.setGPRSNetworkSettings(F("internet"));
-  state = false;
-
   // pinMode(TILT_IN, INPUT);
   pinMode(LED, OUTPUT);
   pinMode(INTR, INPUT_PULLUP);
   attachInterruptForTilt();
+
+  while (!Serial);
+  Serial.begin(9600);
+  while(!Serial1);
+  Serial1.begin(9600);
+  Serial.println(F("FONA basic test"));
+
+  // fonaSerial->begin(4800);
+  // if (! fona.begin(*fonaSerial)) {
+  //   while (1);
+  // }
+  // type = fona.type();
+  // fona.setGPRSNetworkSettings(F("internet"));
+  state = false;
+  lat = 0.123456;
+  lon = 0.123456;
 }
 
 
 void loop() {
   Serial.print(F("FONA> "));
   while (! Serial.available() ) {
-    if (fona.available()) {
-      Serial.write(fona.read());
-    }
+    // if (fona.available()) {
+    //   Serial.write(fona.read());
+    // }
   }
 
   // while(!fona.available());
@@ -67,11 +81,37 @@ void loop() {
   //   Serial.println(readTilt());
   //   delay(50);
   // }
-
-  flushSerial();
-  while (fona.available()) {
-    Serial.write(fona.read());
+  while(!Serial1.available());
+  while(Serial1.available()){ // check for gps data
+    if(gps.encode(Serial1.read())){ 
+      gps.f_get_position(&lat,&lon);
+    }
+    Serial.print("GPS: ");
+    Serial.print(lat, 6);
+    Serial.print(", ");
+    Serial.print(lon, 6);
+    Serial.println("");
   }
+
+  // while(1){
+  //   if(Serial1.available()){
+  //     Serial.println("GPS available");
+  //   }
+  //   while(Serial.available()){
+  //     delay(1);
+  //     Serial1.write(Serial.read());
+  //   }
+  //   if(Serial1.available()){
+  //     Serial.write(Serial1.read());
+  //   }
+  // }
+
+
+
+  // flushSerial();
+  // while (fona.available()) {
+  //   Serial.write(fona.read());
+  // }
 }
 
 void flushSerial() {
