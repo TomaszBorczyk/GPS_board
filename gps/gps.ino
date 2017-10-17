@@ -1,5 +1,5 @@
-
 #include "Adafruit_FONA.h"
+#include <SoftwareSerial.h>
 
 #define FONA_RX  9
 #define FONA_TX  8
@@ -10,7 +10,6 @@
 // this is a large buffer for replies
 char replybuffer[255];
 
-#include <SoftwareSerial.h>
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
@@ -19,7 +18,6 @@ uint8_t type;
 
 
 void setup() {
-
   fonaSerial->begin(4800);
   if (! fona.begin(*fonaSerial)) {
     while (1);
@@ -30,7 +28,6 @@ void setup() {
 
 
 void loop() {
-
   while(!fona.available());
   while(getNetworkStatus()!=1);
   while(!enableGPRS()){
@@ -45,12 +42,12 @@ void loop() {
   while(1);
 }
 
+
 void postData(char *URL, char *data){
   uint16_t statuscode;
   int16_t length;
 
   if (!fona.HTTP_POST_start(URL, F("application/json"), (uint8_t *) data, strlen(data), &statuscode, (uint16_t *)&length)) {
-    // Serial.println("Failed!");
   }
   while (length > 0) {
     while (fona.available()) {
@@ -75,7 +72,6 @@ const char *getNetworkTime(){
 
 boolean enableGPRS(){
     if (!fona.enableGPRS(true)){
-        // Serial.println(F("Failed to turn on"));
         return false;
     }
     return true;
