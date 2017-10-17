@@ -33,6 +33,11 @@ void setup() {
   type = fona.type();
   fona.setGPRSNetworkSettings(F("internet"));
   state = false;
+
+  // pinMode(TILT_IN, INPUT);
+  pinMode(LED, OUTPUT);
+  pinMode(INTR, INPUT_PULLUP);
+  attachInterruptForTilt();
 }
 
 
@@ -58,10 +63,10 @@ void loop() {
 
   // while(1);
 
-  while(1){
-    Serial.println(readTilt());
-    delay(50);
-  }
+  // while(1){
+  //   Serial.println(readTilt());
+  //   delay(50);
+  // }
 
   flushSerial();
   while (fona.available()) {
@@ -72,6 +77,11 @@ void loop() {
 void flushSerial() {
   while (Serial.available())
     Serial.read();
+}
+
+void attachInterruptForTilt(){
+  attachInterrupt(digitalPinToInterrupt(INTR), blink, CHANGE);
+  
 }
 
 void blink(){
