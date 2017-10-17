@@ -7,6 +7,7 @@
 #define FONA_RI  7
 #define INTR 2
 #define LED 13
+#define TILT_IN 18
 
 #define _URL "gps-tracker.herokuapp.com/api/v1/device/registerdevice"
 // this is a large buffer for replies
