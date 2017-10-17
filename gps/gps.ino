@@ -11,7 +11,8 @@
 #define LED 13
 #define TILT_IN 18
 
-#define _URL "gps-tracker.herokuapp.com/api/v1/device/registerdevice"
+#define IMEI "862877033359769"
+#define _URL "gps-tracker.herokuapp.com/api/v1/device/updatelocation"
 
 enum deviceMode {SLEEP, TRACK};
 
@@ -93,7 +94,7 @@ void loop() {
   while(Serial1.available()){ // check for gps data
     if(gps.encode(Serial1.read())){ 
       gps.f_get_position(&lat,&lon);
-      Serial.println(createJSONData(lat, lon));
+      Serial.println(createJSONData(IMEI, lat, lon));
     }
   }
 
@@ -157,7 +158,7 @@ float readTilt(){
   return value;
 }
 
-const char *createJSONData(float lat, float lon){
+const char *createJSONData(const char* id, float lat, float lon){
   char buffer[250];
   char lat_c[12], lon_c[13];
   dtostrf(lat, 9, 7, lat_c);
@@ -165,7 +166,7 @@ const char *createJSONData(float lat, float lon){
   lat_c[11]='\0';
   lon_c[12]='\0';
   
-  sprintf(buffer, "{lat:%s,lon:%s}%c", lat_c, lon_c, '\0');
+  sprintf(buffer, "{\"device_id\":\"%s\",\"lat\":%s,\"lon\":%s}%c", id, lat_c, lon_c, '\0');
   return buffer;
 }
 
