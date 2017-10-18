@@ -1,4 +1,5 @@
 #include "Adafruit_FONA.h"
+#include <avr/sleep.h>
 #include <SoftwareSerial.h>
 #include <TinyGPS.h>
 
@@ -14,12 +15,12 @@
 #define IMEI "862877033359769"
 #define _URL "gps-tracker.herokuapp.com/api/v1/device/updatelocation"
 
-enum deviceMode {SLEEP, TRACK};
+enum deviceMode {SLEEP, TRACK, ENTER_TRACK};
 
 volatile enum deviceMode mode;
+volatile bool state;
 char replybuffer[255];
 float lat, lon;
-volatile bool state;
 
 TinyGPS gps;
 
@@ -31,10 +32,9 @@ uint8_t type;
 
 
 void setup() {
-  // pinMode(TILT_IN, INPUT);
-  // pinMode(LED, OUTPUT);
-  // pinMode(INTR, INPUT_PULLUP);
-  // attachInterruptForTilt();
+  pinMode(LED, OUTPUT);
+  pinMode(INTR, INPUT_PULLUP);
+  attachTiltIntr();
 
   while (!Serial);
   Serial.begin(9600);
@@ -57,12 +57,14 @@ void setup() {
 
 
 void loop() {
-  while (! Serial.available() ) {
+  // while (! Serial.available() ) {
     // if (fona.available()) {
     //   Serial.write(fona.read());
     // }
-  }
-  
+  // }
+      
+  // sleepMCU();
+
   // main code idea 
   // while(mode == TRACK){
   //   if(gps.encode(Serial1.read())){ 
@@ -79,32 +81,26 @@ void loop() {
   // end of main code idea 
 
 
-  // while(!fona.available()){
-  //   Serial.println("fona not av");
-  // }
-  // while(getNetworkStatus()!=1){
-  //   Serial.println("no netwrok");
-  // }
-  // while(!enableGPRS()){
-  //   Serial.println("enabloong gprs");
-  //   delay(1000);
-  // }
+  if(mode == SLEEP){
+    Serial.println(F("Sleep mode"));
+    delay(100);
+  }
+  else if(mode == TRACK || mode == ENTER_TRACK){
+    if(mode == ENTER_TRACK){
+      // setupGPRS();
 
-  while(!Serial1.available());
-  while(Serial1.available()){ // check for gps data
-    if(gps.encode(Serial1.read())){ 
-      gps.f_get_position(&lat,&lon);
-      Serial.println(createJSONData(IMEI, lat, lon));
+    }
+    while(!Serial1.available());
+    while(Serial1.available()){ // check for gps data
+      if(gps.encode(Serial1.read())){ 
+        gps.f_get_position(&lat,&lon);
+        Serial.println(createJSONData(IMEI, lat, lon));
+        postData(_URL, createJSONData(IMEI, lat, lon));
+        delay(15000);
+      }
     }
   }
 
-  // Serial.println(F("HELLO"));
-
-
-  // flushSerial();
-  // while (fona.available()) {
-  //   Serial.write(fona.read());
-  // }
 }
 
 void basicSetup(){
@@ -134,10 +130,10 @@ void attachTiltIntr(){
 }
 
 void enterTrackingMode(){
-  mode = TRACK;
+  sleep_disable();
   detachInterrupt(digitalPinToInterrupt(INTR));
-  fona.enableGPRS(true);
-
+  mode = TRACK;
+  // fona.enableGPRS(true);
 }
 
 void enterSleepMode(){
@@ -180,7 +176,7 @@ void postData(char *URL, char *data){
   while (length > 0) {
     while (fona.available()) {
       char c = fona.read();
-      Serial.write(c);
+      // Serial.write(c);
       length--;
       if (! length) break;
     }
@@ -193,15 +189,17 @@ uint8_t getNetworkStatus(){
     return n;    
 }
 
-const char *getNetworkTime(){
-    char buffer[23];
-    fona.getTime(buffer, 23);  // make sure replybuffer is at least 23 bytes!
-    return buffer;
-}
-
 boolean enableGPRS(){
     if (!fona.enableGPRS(true)){
         return false;
     }
     return true;
+}
+
+void sleepMCU(){
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN); 
+  sleep_enable();  
+  attachTiltIntr();
+  sleep_mode(); 
+  // sleep_disable();  
 }
