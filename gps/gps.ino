@@ -15,20 +15,23 @@
 #define IMEI "862877033359769"
 #define _URL "gps-tracker.herokuapp.com/api/v1/device/updatelocation"
 
-enum deviceMode {SLEEP, TRACK, ENTER_TRACK};
+#define RADIUS 6373
+#define TO_RAD (3.1415926536 / 180)
+#define MAX_DISTANCE 20
+#define MAX_ITERATIONS 5
+#define GPS_SLEEP_TIME 1000
+
+enum deviceMode {SLEEP, TRACK, ENTER_TRACK, ENTER_SLEEP};
 
 volatile enum deviceMode mode;
-volatile bool state;
-char replybuffer[255];
 float lat, lon;
-
+float startLat, startLon;
+int trackIterations;
 TinyGPS gps;
 
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
-
-uint8_t type;
 
 
 void setup() {
@@ -36,23 +39,10 @@ void setup() {
   pinMode(INTR, INPUT_PULLUP);
   attachTiltIntr();
 
-  while (!Serial);
-  Serial.begin(9600);
-  while(!Serial1);
-  Serial1.begin(9600);
-  Serial.println(F("FONA basic test"));
-
-  fonaSerial->begin(4800);
-  if (! fona.begin(*fonaSerial)) {
-    while (1);
-  }
-  type = fona.type();
-  fona.setGPRSNetworkSettings(F("internet"));
-  state = false;
-  mode = SLEEP;
-  lat = 0.11;
-  lon = 0.11;
   basicSetup();
+  serialSetup();
+  fonaSetup();
+  resetTrackIterations();
 }
 
 
@@ -62,67 +52,86 @@ void loop() {
     //   Serial.write(fona.read());
     // }
   // }
-      
-  // sleepMCU();
-
-  // main code idea 
-  // while(mode == TRACK){
-  //   if(gps.encode(Serial1.read())){ 
-  //     gps.f_get_position(&lat, &lon);
-  //     char * response = postData(createJSONData(lat, lon));
-  //     checkIfPositionNotChanging();
-  //     checkResponse(response);
-  //     if(shouldStop) enterSleepMode();
-  //     delay(15000);
-  //   }
-  // }
-  // else if(mode == SLEEP){
-  // }
-  // end of main code idea 
-
 
   if(mode == SLEEP){
     Serial.println(F("Sleep mode"));
-    delay(100);
+    delay(500);
   }
   else if(mode == TRACK || mode == ENTER_TRACK){
     if(mode == ENTER_TRACK){
-      // setupGPRS();
-
-    }
-    while(!Serial1.available());
-    while(Serial1.available()){ // check for gps data
-      if(gps.encode(Serial1.read())){ 
-        gps.f_get_position(&lat,&lon);
-        Serial.println(createJSONData(IMEI, lat, lon));
-        postData(_URL, createJSONData(IMEI, lat, lon));
-        delay(15000);
+      while(Serial1.available()){ // check for gps data
+        if(gps.encode(Serial1.read())){ 
+          gps.f_get_position(&startLat, &startLon);
+          mode = TRACK;
+          break;
+        }
       }
     }
+    if(mode == TRACK){
+      while(!Serial1.available());
+      while(Serial1.available()){ // check for gps data
+        if(gps.encode(Serial1.read())){ 
+          gps.f_get_position(&lat,&lon);
+          Serial.println(createJSONData(IMEI, lat, lon));
+          // postData(_URL, createJSONData(IMEI, lat, lon));
+          // checkIfPositionNotChanging(lat, lon);
+          Serial.println(calculateDistance(lat, lon, startLat, startLon), 5);
+          if(trackIterations > MAX_ITERATIONS && isCloseToStart(calculateDistance(lat, lon, startLat, startLon))){
+            mode = ENTER_SLEEP;
+          }
+          trackIterations++;
+          delay(GPS_SLEEP_TIME);
+        }
+      }
+      if(mode == ENTER_SLEEP){
+        Serial.println("Entering sleep...");
+        resetTrackIterations();
+        enterSleepMode();
+      }
+    }
+
   }
 
 }
 
-void basicSetup(){
-  while(!fona.available()){
-    // Serial.println("fona not av");
+void fonaSetup(){
+  fonaSerial->begin(4800);
+  if (! fona.begin(*fonaSerial)) {
+    while (1);
   }
-  while(getNetworkStatus()!=1){
-    // Serial.println("no netwrok");
-  }
+  while(!fona.available());
+  while(getNetworkStatus()!=1);
+  fona.setGPRSNetworkSettings(F("internet"));
   while(!enableGPRS()){
-    // Serial.println("enabloong gprs");
     delay(1000);
   }
 }
 
-void flushSerial() {
-  while (Serial.available())
-    Serial.read();
+void basicSetup(){
+  mode = SLEEP;
 }
 
-void attachInterruptForTilt(){
-  attachInterrupt(digitalPinToInterrupt(INTR), blink, CHANGE);
+void serialSetup(){
+  while (!Serial);
+  Serial.begin(9600);
+  while(!Serial1);
+  Serial1.begin(9600);
+}
+
+uint8_t getNetworkStatus(){
+  uint8_t n = fona.getNetworkStatus();
+  return n;    
+}
+
+boolean enableGPRS(){
+  if (!fona.enableGPRS(true)){
+      return false;
+  }
+  return true;
+}
+
+void resetTrackIterations(){
+  trackIterations = 0;
 }
 
 void attachTiltIntr(){
@@ -132,27 +141,47 @@ void attachTiltIntr(){
 void enterTrackingMode(){
   sleep_disable();
   detachInterrupt(digitalPinToInterrupt(INTR));
-  mode = TRACK;
+  mode = ENTER_TRACK;
   // fona.enableGPRS(true);
 }
 
 void enterSleepMode(){
   mode = SLEEP;
   attachTiltIntr();
-  fona.enableGPRS(false);
+  // fona.enableGPRS(false);
 }
 
-void blink(){
-  if(state == false) digitalWrite(LED, HIGH);
-  else digitalWrite(LED, LOW);
-  state = !state;
+void sleepMCU(){
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN); 
+  sleep_enable();  
+  attachTiltIntr();
+  sleep_mode(); 
+  // sleep_disable();  
 }
 
-float readTilt(){
-  float value;
-  value = pulseIn(TILT_IN, HIGH);
-  return value;
+
+
+bool isCloseToStart(float distance){
+  return distance < MAX_DISTANCE;
 }
+
+float calculateDistance(float lat1, float lon1, float lat2, float lon2){
+  float dLat, dLon, a, c, distance;
+
+  dLat = toRadians(lat2 - lat1);
+  dLon = toRadians(lon2 - lon1);
+  a = pow(sin(dLat/2), 2) + cos(lat1) * cos(lat2) * pow(sin(dLon/2), 2);
+  // c = 2 * atan2( sqrt(a), sqrt(1-a));
+  // distance = RADIUS * c;
+  distance = 2 * RADIUS * asin(sqrt(a));
+
+  return distance*1000;
+}
+
+float toRadians(float value){
+  return TO_RAD * value;
+}
+
 
 const char *createJSONData(const char* id, float lat, float lon){
   char buffer[250];
@@ -182,24 +211,4 @@ void postData(char *URL, char *data){
     }
   }
   fona.HTTP_POST_end();
-}
-
-uint8_t getNetworkStatus(){
-    uint8_t n = fona.getNetworkStatus();
-    return n;    
-}
-
-boolean enableGPRS(){
-    if (!fona.enableGPRS(true)){
-        return false;
-    }
-    return true;
-}
-
-void sleepMCU(){
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN); 
-  sleep_enable();  
-  attachTiltIntr();
-  sleep_mode(); 
-  // sleep_disable();  
 }
