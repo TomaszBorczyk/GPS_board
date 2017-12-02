@@ -18,8 +18,8 @@
 #define RADIUS 6373
 #define TO_RAD (3.1415926536 / 180)
 #define MAX_DISTANCE 20
-#define MAX_ITERATIONS 5
-#define GPS_SLEEP_TIME 1000
+#define MAX_ITERATIONS 3
+#define GPS_SLEEP_TIME 5000
 
 enum deviceMode {SLEEP, TRACK, ENTER_TRACK, ENTER_SLEEP};
 
@@ -29,20 +29,24 @@ float startLat, startLon;
 int trackIterations;
 TinyGPS gps;
 
+boolean debug;
+
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 
 
 void setup() {
+  debug = false;
   pinMode(LED, OUTPUT);
   pinMode(INTR, INPUT_PULLUP);
-  attachTiltIntr();
-
+  
   basicSetup();
   serialSetup();
   fonaSetup();
   resetTrackIterations();
+  initialWait();
+  attachTiltIntr();
 }
 
 
@@ -54,14 +58,16 @@ void loop() {
   // }
 
   if(mode == SLEEP){
-    Serial.println(F("Sleep mode"));
-    delay(500);
+    if(debug) Serial.println(F("Sleep mode"));
+    delay(1000);
   }
   else if(mode == TRACK || mode == ENTER_TRACK){
     if(mode == ENTER_TRACK){
       while(Serial1.available()){ // check for gps data
         if(gps.encode(Serial1.read())){ 
           gps.f_get_position(&startLat, &startLon);
+          if(debug) Serial.println(createJSONData(IMEI, startLat, startLon, "alert"));
+          postData(_URL, createJSONData(IMEI, startLat, startLon, "alert"));
           mode = TRACK;
           break;
         }
@@ -72,24 +78,24 @@ void loop() {
       while(Serial1.available()){ // check for gps data
         if(gps.encode(Serial1.read())){ 
           gps.f_get_position(&lat,&lon);
-          Serial.println(createJSONData(IMEI, lat, lon));
-          // postData(_URL, createJSONData(IMEI, lat, lon));
-          // checkIfPositionNotChanging(lat, lon);
-          Serial.println(calculateDistance(lat, lon, startLat, startLon), 5);
+          if(debug) Serial.println(createJSONData(IMEI, lat, lon, "update"));
+          postData(_URL, createJSONData(IMEI, lat, lon, "update"));
           if(trackIterations > MAX_ITERATIONS && isCloseToStart(calculateDistance(lat, lon, startLat, startLon))){
             mode = ENTER_SLEEP;
+            break;
           }
           trackIterations++;
           delay(GPS_SLEEP_TIME);
         }
       }
-      if(mode == ENTER_SLEEP){
-        Serial.println("Entering sleep...");
-        resetTrackIterations();
-        enterSleepMode();
-      }
+
     }
 
+  }
+  if(mode == ENTER_SLEEP){
+    if(debug) Serial.println("Entering sleep...");
+    enterSleepMode();
+    resetTrackIterations();
   }
 
 }
@@ -105,6 +111,7 @@ void fonaSetup(){
   while(!enableGPRS()){
     delay(1000);
   }
+  fona.enableNetworkTimeSync(true);
 }
 
 void basicSetup(){
@@ -112,10 +119,16 @@ void basicSetup(){
 }
 
 void serialSetup(){
-  while (!Serial);
-  Serial.begin(9600);
+  if(debug) {
+    while (!Serial);
+    Serial.begin(9600);
+  }
   while(!Serial1);
   Serial1.begin(9600);
+}
+
+void initialWait(){
+  delay(10000);
 }
 
 uint8_t getNetworkStatus(){
@@ -135,11 +148,12 @@ void resetTrackIterations(){
 }
 
 void attachTiltIntr(){
-  attachInterrupt(digitalPinToInterrupt(INTR), enterTrackingMode, RISING);
+  // zmien na CHANGE
+  attachInterrupt(digitalPinToInterrupt(INTR), enterTrackingMode, CHANGE);
 }
 
 void enterTrackingMode(){
-  sleep_disable();
+  // sleep_disable();
   detachInterrupt(digitalPinToInterrupt(INTR));
   mode = ENTER_TRACK;
   // fona.enableGPRS(true);
@@ -183,7 +197,7 @@ float toRadians(float value){
 }
 
 
-const char *createJSONData(const char* id, float lat, float lon){
+const char *createJSONData(const char* id, float lat, float lon, const char* type){
   char buffer[250];
   char lat_c[12], lon_c[13];
   dtostrf(lat, 9, 7, lat_c);
@@ -191,7 +205,13 @@ const char *createJSONData(const char* id, float lat, float lon){
   lat_c[11]='\0';
   lon_c[12]='\0';
   
-  sprintf(buffer, "{\"device_id\":\"%s\",\"lat\":%s,\"lon\":%s}%c", id, lat_c, lon_c, '\0');
+  sprintf(buffer, "{\"deviceId\":\"%s\",\"lat\":%s,\"lon\":%s, \"type\":\"%s\"}%c", id, lat_c, lon_c, type, '\0');
+  return buffer;
+}
+
+const char getTime() {
+  char buffer[250];
+  fona.getTime(*buffer, 240);
   return buffer;
 }
 
